@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Financial Reports | Farm Management System</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-image: url('pexels-dibakar-roy-2432543-20396324.jpg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      overflow-x: hidden;
+    }
+    .container {
+      margin-top: 40px;
+      background-color: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(5px);
+      padding: 20px;
+      border-radius: 10px;
+    }
+    .card {
+      background-color: rgba(255, 255, 255, 0.85);
+      margin-bottom: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .btn:hover { transform: scale(1.05); transition: transform 0.3s ease; }
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1055;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg mb-4" style="background-color: rgba(46,125,47,0.85); border-radius:10px;">
+    <div class="container-fluid">
+      <a class="navbar-brand text-white" href="index.html">🏡 Dashboard</a>
+      <a class="nav-link text-white" href="finance.html">Finance</a>
+      <a class="nav-link text-white" href="cropManagement.html">Crops</a>
+      <button id="logoutBtn" class="btn btn-danger ms-auto">Logout</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <h2 class="mb-4 text-success">💰 Financial Reports</h2>
+
+    <!-- Toasts -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Financial Entry Form -->
+    <div class="card">
+      <div class="card-header bg-success text-white">Add Financial Record</div>
+      <div class="card-body">
+        <form id="financeForm">
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label for="description" class="form-label">Description</label>
+              <input type="text" class="form-control" id="description" required />
+            </div>
+            <div class="col-md-2 mb-3">
+              <label for="type" class="form-label">Type</label>
+              <select class="form-select" id="type" required>
+                <option value="">Select</option>
+                <option value="Income">Income</option>
+                <option value="Expense">Expense</option>
+              </select>
+            </div>
+            <div class="col-md-3 mb-3">
+              <label for="amount" class="form-label">Amount</label>
+              <input type="number" class="form-control" id="amount" min="0" required />
+            </div>
+            <div class="col-md-3 mb-3">
+              <label for="date" class="form-label">Date</label>
+              <input type="date" class="form-control" id="date" required />
+            </div>
+          </div>
+          <button type="submit" class="btn btn-success">Add Record</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+      <div class="col-md-4">
+        <div class="card text-center">
+          <div class="card-header bg-info text-white">Total Income</div>
+          <div class="card-body">
+            <h3 id="totalIncome">৳0</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card text-center">
+          <div class="card-header bg-warning text-dark">Total Expenses</div>
+          <div class="card-body">
+            <h3 id="totalExpenses">৳0</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card text-center">
+          <div class="card-header bg-success text-white">Net Profit</div>
+          <div class="card-body">
+            <h3 id="netProfit">৳0</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Financial Table -->
+    <div class="card mb-4">
+      <div class="card-header bg-dark text-white">Financial Records</div>
+      <div class="card-body">
+        <table class="table table-bordered table-striped" id="financeTable">
+          <thead class="table-success">
+            <tr>
+              <th>#</th>
+              <th>Description</th>
+              <th>Type</th>
+              <th>Amount</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Financial Pie Chart -->
+    <div class="card">
+      <div class="card-header bg-info text-white">Income vs Expenses</div>
+      <div class="card-body">
+        <canvas id="financeChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const financeForm = document.getElementById("financeForm");
+    const financeTable = document.getElementById("financeTable").getElementsByTagName("tbody")[0];
+    const ctx = document.getElementById('financeChart').getContext('2d');
+    let financeChart;
+  
+    // ===== Authentication Check =====
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('You must login first');
+      window.location.href = 'login.html';
+    }
+  
+    const headers = { 
+      'Authorization': `Bearer ${token}`, 
+      'Content-Type': 'application/json' 
+    };
+  
+    // ===== Toast Function =====
+    function showToast(message, type='success') {
+      const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+      const toast = document.createElement('div');
+      toast.className = `toast align-items-center text-bg-${type} border-0 show`;
+      toast.setAttribute('role','alert');
+      toast.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">${message}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>`;
+      toastContainer.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+  
+    function createToastContainer() {
+      const container = document.createElement('div');
+      container.id = 'toastContainer';
+      container.style.position = 'fixed';
+      container.style.top = '20px';
+      container.style.right = '20px';
+      container.style.zIndex = '9999';
+      document.body.appendChild(container);
+      return container;
+    }
+  
+    // ===== Load Finance Data =====
+    async function loadFinance() {
+      try {
+        const res = await fetch(`${BASE_URL}/finance`, { headers });
+        if (!res.ok) throw new Error('Failed to fetch finance records');
+        const records = await res.json();
+  
+        financeTable.innerHTML = '';
+        let totalIncome = 0, totalExpenses = 0;
+  
+        records.forEach((record, i) => {
+          const row = financeTable.insertRow();
+          row.innerHTML = `
+            <td>${i+1}</td>
+            <td>${record.description}</td>
+            <td>${record.type}</td>
+            <td>৳${record.amount}</td>
+            <td>${record.date}</td>`;
+          if(record.type === 'Income') totalIncome += record.amount;
+          else totalExpenses += record.amount;
+        });
+  
+        const netProfit = totalIncome - totalExpenses;
+        document.getElementById('totalIncome').textContent = `৳${totalIncome}`;
+        document.getElementById('totalExpenses').textContent = `৳${totalExpenses}`;
+        document.getElementById('netProfit').textContent = `৳${netProfit}`;
+  
+        if(financeChart) financeChart.destroy();
+        financeChart = new Chart(ctx, {
+          type: 'pie',
+          data: {
+            labels: ['Income', 'Expenses'],
+            datasets: [{
+              label: 'Amount',
+              data: [totalIncome, totalExpenses],
+              backgroundColor: ['rgba(46,125,50,0.7)','rgba(255,193,7,0.7)'],
+              borderColor: ['green','orange'],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { title: { display: true, text: 'Income vs Expenses' } }
+          }
+        });
+      } catch(err) {
+        console.error(err);
+        showToast('Failed to load finance data', 'danger');
+      }
+    }
+  
+    // ===== Add Record =====
+    financeForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = {
+        description: document.getElementById("description").value,
+        type: document.getElementById("type").value,
+        amount: parseInt(document.getElementById("amount").value),
+        date: document.getElementById("date").value
+      };
+  
+      try {
+        const res = await fetch(`${BASE_URL}/finance`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(data)
+        });
+        if (!res.ok) throw new Error('Failed to add record');
+        financeForm.reset();
+        loadFinance();
+        showToast('Record added successfully!');
+      } catch(err) {
+        console.error(err);
+        showToast('Failed to add record', 'danger');
+      }
+    });
+  
+    // ===== Logout =====
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', () => {
+        localStorage.removeItem('token');
+        window.location.href = 'login.html';
+      });
+    }
+  
+    // ===== Initial Load =====
+    loadFinance();
+  </script>
+  
+
+</body>
+</html>

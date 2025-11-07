@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Equipment & Inventory | Farm Management System</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-image: url('pexels-dibakar-roy-2432543-20396324.jpg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+    }
+    .container {
+      margin-top: 40px;
+      background-color: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(5px);
+      padding: 20px;
+      border-radius: 10px;
+    }
+    .card {
+      background-color: rgba(255, 255, 255, 0.85);
+      margin-bottom: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .btn:hover { transform: scale(1.05); transition: transform 0.3s ease; }
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 1055; }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg mb-4" style="background-color: rgba(46,125,47,0.85); border-radius:10px;">
+    <div class="container-fluid">
+      <a class="navbar-brand text-white" href="index.html">🏡 Dashboard</a>
+      <a class="nav-link text-white" href="cropManagement.html">Crops</a>
+      <a class="nav-link text-white" href="finance.html">Finance</a>
+      <a class="nav-link text-white" href="inventory.html">Inventory</a>
+      <a class="nav-link text-white" href="livesk.html">Livestock</a>
+      <button id="logoutBtn" class="btn btn-danger ms-auto">Logout</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <h2 class="mb-4 text-success">🚜 Equipment & Inventory</h2>
+
+    <!-- Toasts -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Inventory Entry Form -->
+    <div class="card">
+      <div class="card-header bg-success text-white">Add Inventory Item</div>
+      <div class="card-body">
+        <form id="inventoryForm">
+          <div class="row">
+            <div class="col-md-5 mb-3">
+              <label for="item" class="form-label">Item Name</label>
+              <input type="text" class="form-control" id="item" placeholder="e.g., Tractor, Fertilizer" required />
+            </div>
+            <div class="col-md-3 mb-3">
+              <label for="quantity" class="form-label">Quantity</label>
+              <input type="number" class="form-control" id="quantity" min="0" required />
+            </div>
+            <div class="col-md-4 mb-3">
+              <label for="date" class="form-label">Date</label>
+              <input type="date" class="form-control" id="date" required />
+            </div>
+          </div>
+          <button type="submit" class="btn btn-success">Add Item</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+      <div class="col-md-4">
+        <div class="card text-center">
+          <div class="card-header bg-info text-white">Total Items</div>
+          <div class="card-body"><h3 id="totalItems">0</h3></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card text-center">
+          <div class="card-header bg-warning text-dark">Low Stock</div>
+          <div class="card-body"><h3 id="lowStock">0</h3></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card text-center">
+          <div class="card-header bg-success text-white">Total Quantity</div>
+          <div class="card-body"><h3 id="totalQuantity">0</h3></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inventory Table -->
+    <div class="card mb-4">
+      <div class="card-header bg-dark text-white">Inventory Records</div>
+      <div class="card-body">
+        <table class="table table-bordered table-striped" id="inventoryTable">
+          <thead class="table-success">
+            <tr>
+              <th>#</th>
+              <th>Item</th>
+              <th>Quantity</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Inventory Chart -->
+    <div class="card">
+      <div class="card-header bg-info text-white">Quantity by Item</div>
+      <div class="card-body">
+        <canvas id="inventoryChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const inventoryForm = document.getElementById("inventoryForm");
+    const inventoryTable = document.getElementById("inventoryTable").getElementsByTagName("tbody")[0];
+    const ctx = document.getElementById('inventoryChart').getContext('2d');
+    let inventoryChart;
+  
+    // ===== Authentication Check =====
+    const token = localStorage.getItem('token');
+    if (!token) { 
+      alert('You must login first'); 
+      window.location.href = 'login.html'; 
+    }
+  
+    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+  
+    // ===== Toast Function =====
+    function showToast(message, type='success') {
+      const toast = document.createElement('div');
+      toast.className = `toast align-items-center text-bg-${type} border-0 show`;
+      toast.setAttribute('role','alert');
+      toast.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">${message}</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>`;
+      document.getElementById('toastContainer').appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+  
+    // ===== Load Inventory =====
+    async function loadInventory() {
+      try {
+        const res = await fetch(`${BASE_URL}/inventory`, { headers });
+        if (!res.ok) throw new Error('Failed to fetch inventory');
+        const records = await res.json();
+  
+        inventoryTable.innerHTML = '';
+        let totalItems = 0, lowStock = 0, totalQuantity = 0;
+        const itemCount = {};
+  
+        records.forEach((record, i) => {
+          const row = inventoryTable.insertRow();
+          row.innerHTML = `<td>${i+1}</td><td>${record.item}</td><td>${record.quantity}</td><td>${record.date}</td>`;
+          totalItems++;
+          totalQuantity += record.quantity;
+          if (record.quantity <= 5) lowStock++;
+          itemCount[record.item] = (itemCount[record.item] || 0) + record.quantity;
+        });
+  
+        document.getElementById('totalItems').textContent = totalItems;
+        document.getElementById('lowStock').textContent = lowStock;
+        document.getElementById('totalQuantity').textContent = totalQuantity;
+  
+        // ===== Inventory Chart =====
+        const labels = Object.keys(itemCount);
+        const data = Object.values(itemCount);
+  
+        if (inventoryChart) inventoryChart.destroy();
+        inventoryChart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Quantity', data, backgroundColor: 'rgba(46,125,50,0.7)' }] },
+          options: { responsive: true, plugins: { title: { display: true, text: 'Inventory Quantity by Item' } } }
+        });
+  
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to load inventory', 'danger');
+      }
+    }
+  
+    // ===== Add Inventory Item =====
+    inventoryForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const data = {
+        item: document.getElementById("item").value,
+        quantity: parseInt(document.getElementById("quantity").value),
+        date: document.getElementById("date").value
+      };
+      try {
+        const res = await fetch(`${BASE_URL}/inventory`, { method: 'POST', headers, body: JSON.stringify(data) });
+        if (!res.ok) throw new Error('Failed to add item');
+        inventoryForm.reset();
+        loadInventory();
+        showToast('Item added successfully!');
+      } catch(err) {
+        console.error(err);
+        showToast('Failed to add item', 'danger');
+      }
+    });
+  
+    // ===== Logout =====
+    const logoutBtn = document.getElementById('logoutBtn');
+    if(logoutBtn){
+      logoutBtn.addEventListener('click', () => {
+        localStorage.removeItem('token');
+        window.location.href = 'login.html';
+      });
+    }
+  
+    // ===== Initial Load =====
+    loadInventory();
+  </script>
+  
+
+</body>
+</html>
